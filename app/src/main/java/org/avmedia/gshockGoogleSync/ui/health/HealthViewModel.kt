@@ -9,18 +9,25 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.avmedia.gshockGoogleSync.ActionContainer
 import org.avmedia.gshockGoogleSync.data.repository.GShockRepository
+import org.avmedia.gshockGoogleSync.data.sleep.SleepSyncManager
+import org.avmedia.gshockGoogleSync.data.sleep.StoredActivity
 import org.avmedia.gshockGoogleSync.ui.common.IWatchFeatureManager
 import org.avmedia.gshockapi.EventAction
 import org.avmedia.gshockapi.ProgressEvents
 import org.avmedia.gshockapi.WatchInfo
 import org.avmedia.gshockapi.model.ExerciseProfile
 import org.avmedia.gshockapi.model.StepCounterData
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Locale
 import javax.inject.Inject
 import kotlin.math.roundToInt
@@ -74,8 +81,29 @@ data class HealthState(
     val weight: Int = 70, // kg
     val height: Int = 170, // cm
     val calories: Float = 0f,
-    val distanceKm: Float = 0f
+    val distanceKm: Float = 0f,
+    /** Total kcal and active minutes reported by the watch itself (DW-H5600), when available. */
+    val watchKcal: Int? = null,
+    val activeMinutes: Int? = null,
 )
+
+/**
+ * Builds the Steps card data from life-log activity: today's total, the last 10 hours,
+ * and the 6 previous days (oldest first, missing days as 0).
+ */
+internal fun StoredActivity.toStepCounterData(
+    now: Instant = Instant.now(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): StepCounterData {
+    val today = now.atZone(zone).toLocalDate()
+    return StepCounterData(
+        dayOfMonth = today.dayOfMonth,
+        month = today.monthValue,
+        hourlySteps = hourlySteps(now, zone, 10),
+        dailyHistory = (6 downTo 1).map { stepsOn(today.minusDays(it.toLong()), zone) },
+        currentDaySteps = stepsOn(today, zone),
+    )
+}
 
 sealed interface HealthAction {
     data class SetStepDataOption(val option: StepDataOption) : HealthAction
@@ -107,6 +135,7 @@ class HealthViewModel @Inject constructor(
     private val watchFeatureManager: IWatchFeatureManager,
     private val actionContainer: ActionContainer,
     private val sessionManager: org.avmedia.gshockGoogleSync.session.SessionManager,
+    private val sleepSyncManager: SleepSyncManager,
     @param:ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -127,6 +156,36 @@ class HealthViewModel @Inject constructor(
 
         if (WatchInfo.hasStepCounter || WatchInfo.hasStepCounterMock) {
             startStepCounterPolling()
+        }
+        if (WatchInfo.hasSleepData) {
+            observeLifeLogActivity()
+        }
+    }
+
+    /** DW-H5600: steps come from the life-log transfer (done by SleepSyncManager), not polling. */
+    private fun observeLifeLogActivity() {
+        viewModelScope.launch {
+            combine(sleepSyncManager.activity, minuteTicker()) { activity, now -> activity to now }
+                .collect { (activity, now) ->
+                    val zone = ZoneId.systemDefault()
+                    val stepData = activity.toStepCounterData(now, zone)
+                    val today = activity.day(LocalDate.ofInstant(now, zone))
+                    _state.update {
+                        it.copy(
+                            stepCounterData = stepData,
+                            distanceKm = resolveDistanceKm(stepData),
+                            watchKcal = today?.kcal,
+                            activeMinutes = today?.activeMin,
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun minuteTicker() = flow {
+        while (true) {
+            emit(Instant.now())
+            delay(60_000)
         }
     }
 

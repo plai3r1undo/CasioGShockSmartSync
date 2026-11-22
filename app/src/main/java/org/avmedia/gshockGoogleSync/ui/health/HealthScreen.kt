@@ -24,6 +24,7 @@ import org.avmedia.gshockGoogleSync.R
 import org.avmedia.gshockGoogleSync.theme.GShockSmartSyncTheme
 import org.avmedia.gshockGoogleSync.ui.common.AppButton
 import org.avmedia.gshockGoogleSync.ui.common.ScreenTitle
+import org.avmedia.gshockapi.WatchInfo
 
 @Composable
 fun HealthScreen() {
@@ -45,6 +46,11 @@ fun HealthScreen() {
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // Sleep card — Nightly Recharge data stored from the watch (DW-H5600)
+                    if (WatchInfo.hasSleepData) {
+                        SleepCardView(modifier = Modifier.fillMaxWidth())
+                    }
+
                     // Steps card — shows Today, Hourly, and Daily panels all at once
                     StepCounterView(
                         modifier = Modifier.fillMaxWidth()

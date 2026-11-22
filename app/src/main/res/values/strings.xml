@@ -217,4 +217,25 @@
     <string name="exercise_profile_read_failed">Couldn\'t read the watch\'s exercise profile. Change not saved.</string>
     <string name="health">Health</string>
     <string name="alarm_send_failed" translatable="false">Couldn\'t save alarms to the watch.</string>
+    <!-- Sleep (DW-H5600 Nightly Recharge) -->
+    <string name="sleep">Sleep</string>
+    <string name="sleep_charge">Sleep charge</string>
+    <string name="ans_charge">ANS charge</string>
+    <string name="sleep_total_span">Total sleep span</string>
+    <string name="sleep_interruptions">Interruptions</string>
+    <string name="sleep_actual">Actual sleep time</string>
+    <string name="sleep_rem">REM</string>
+    <string name="sleep_light">Light</string>
+    <string name="sleep_deep">Deep</string>
+    <string name="sleep_heart_rate">Heart rate</string>
+    <string name="sleep_hrv">Heart rate variability</string>
+    <string name="sleep_breathing">Breathing rate</string>
+    <string name="sleep_baseline">usual %1$s</string>
+    <string name="sleep_no_data">No sleep data yet. New nights are downloaded from the watch automatically while it is connected.</string>
+    <string name="sleep_sync">Sync sleep data</string>
+    <string name="sleep_syncing">Downloading sleep data…</string>
+    <string name="sleep_previous_night">Previous night</string>
+    <string name="sleep_next_night">Next night</string>
+    <string name="sleep_no_hypnogram">No sleep phases for this night</string>
+    <string name="active_time">%1$s active</string>
 </resources>

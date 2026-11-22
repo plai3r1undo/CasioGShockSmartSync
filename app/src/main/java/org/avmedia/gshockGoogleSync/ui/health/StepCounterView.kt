@@ -80,7 +80,8 @@ fun StepCounterView(
                     currentSteps = currentSteps,
                     goal = state.stepGoal,
                     distanceKm = state.distanceKm,
-                    calories = state.calories
+                    calories = state.watchKcal?.toFloat() ?: state.calories,
+                    activeMinutes = state.activeMinutes,
                 )
             }
 
@@ -144,6 +145,7 @@ private fun StepsProgressRing(
     distanceKm: Float,
     calories: Float,
     modifier: Modifier = Modifier,
+    activeMinutes: Int? = null,
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
@@ -200,6 +202,18 @@ private fun StepsProgressRing(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.SemiBold
+                )
+            }
+            if (activeMinutes != null) {
+                Text(
+                    text = stringResource(
+                        R.string.active_time,
+                        String.format(Locale.US, "%d:%02d", activeMinutes / 60, activeMinutes % 60),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
                 )
             }
         }

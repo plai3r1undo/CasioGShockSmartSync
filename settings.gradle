@@ -18,3 +18,13 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Casio GShock Smart Sync"
 include ':app'
+
+// Build against a local GShockAPI checkout instead of the JitPack artifact:
+//   ./gradlew assembleDebug -PlocalGShockApi=true   (expects ../GShockAPI)
+if (providers.gradleProperty('localGShockApi').getOrElse('false') == 'true') {
+    includeBuild('../GShockAPI') {
+        dependencySubstitution {
+            substitute module('com.github.izivkov:GShockAPI') using project(':api')
+        }
+    }
+}

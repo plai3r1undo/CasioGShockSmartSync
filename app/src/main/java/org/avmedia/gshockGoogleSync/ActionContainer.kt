@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.avmedia.gshockGoogleSync.data.repository.GShockRepository
+import org.avmedia.gshockGoogleSync.data.sleep.SleepSyncManager
 import org.avmedia.gshockGoogleSync.scratchpad.ActionsStorage
 import org.avmedia.gshockGoogleSync.scratchpad.AlarmNameStorage
 import org.avmedia.gshockGoogleSync.scratchpad.EventStorage
@@ -94,7 +95,8 @@ constructor(
     private val watchFeatureManager: IWatchFeatureManager,
     private val eventStorage: EventStorage,
     private val alarmNameStorage: AlarmNameStorage,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val sleepSyncManager: SleepSyncManager,
 ) {
     /** Manually-created scope, since this class has no ViewModel/Activity lifecycle to tie one to. Lives as long as the process. */
     private val containerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -217,6 +219,7 @@ constructor(
             add(SetTimerAction("Set Timer", true)) // Hidden from UI, only for voice/Send-to-Watch
             add(SetExerciseProfileAction("Set Exercise Profile", true)) // Hidden from UI, direct-invocation only
             add(ClearStepHistoryAction("Clear Step History", true)) // Hidden from UI, direct-invocation only
+            add(SyncSleepAction("Sync Sleep Data", true)) // Hidden from UI, runs on always-connected reconnects
             add(
                 PhotoAction(
                     appContext.getString(R.string.take_photo),
@@ -1040,6 +1043,31 @@ constructor(
         }
 
         override fun shouldRun(runEnvironment: RunEnvironment): Boolean = when (runEnvironment) {
+            RunEnvironment.DIRECT_INVOCATION -> true
+            else -> false
+        }
+    }
+
+    /**
+     * Downloads new sleep nights (DW-H5600). The watch sends each night only once and keeps
+     * only a few, so this runs on always-connected reconnects (at most hourly) and stores them.
+     */
+    inner class SyncSleepAction(
+        override var title: String,
+        override var enabled: Boolean,
+    ) : Action(title, enabled, RunMode.ASYNC) {
+        private var lastRun: Long? = null
+
+        override fun run(context: Context) = launchRunSuspend(context)
+
+        override suspend fun runSuspend(context: Context) {
+            lastRun = System.currentTimeMillis()
+            sleepSyncManager.sync()
+        }
+
+        override fun shouldRun(runEnvironment: RunEnvironment): Boolean = when (runEnvironment) {
+            RunEnvironment.ALWAYS_CONNECTED, RunEnvironment.NORMAL_CONNECTION ->
+                sleepSyncManager.isSupported && isOlderThan(lastRun, ONE_HOUR_MS)
             RunEnvironment.DIRECT_INVOCATION -> true
             else -> false
         }
