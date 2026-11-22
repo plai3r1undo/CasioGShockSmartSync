@@ -1,7 +1,7 @@
 package org.avmedia.gshockGoogleSync.ui.events
 
-import android.app.DatePickerDialog
 import androidx.compose.foundation.clickable
+import org.avmedia.gshockGoogleSync.ui.common.AppDatePickerDialog
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,14 +31,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import org.avmedia.gshockapi.model.Event
 import org.avmedia.gshockapi.model.EventDate
 import org.avmedia.gshockapi.model.RepeatPeriod
 import java.time.DayOfWeek
 import java.time.LocalDate
-import java.time.ZoneId
 import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -245,25 +243,11 @@ fun SimpleDatePicker(
     minDate: LocalDate? = null,
     onDateChange: (LocalDate) -> Unit
 ) {
-    val context = LocalContext.current
+    var showPicker by remember { mutableStateOf(false) }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {
-                val dialog = DatePickerDialog(
-                    context,
-                    { _, year, month, dayOfMonth ->
-                        onDateChange(LocalDate.of(year, month + 1, dayOfMonth))
-                    },
-                    date.year,
-                    date.monthValue - 1,
-                    date.dayOfMonth
-                )
-                minDate?.let {
-                    dialog.datePicker.minDate = it.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                }
-                dialog.show()
-            }
+            .clickable { showPicker = true }
     ) {
         OutlinedTextField(
             value = "${date.year}-${date.monthValue}-${date.dayOfMonth}",
@@ -276,6 +260,14 @@ fun SimpleDatePicker(
                 disabledBorderColor = MaterialTheme.colorScheme.outline,
                 disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        )
+    }
+    if (showPicker) {
+        AppDatePickerDialog(
+            initialDate = date,
+            minDate = minDate,
+            onConfirm = onDateChange,
+            onDismiss = { showPicker = false },
         )
     }
 }

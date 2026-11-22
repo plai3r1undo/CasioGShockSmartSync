@@ -238,4 +238,19 @@
     <string name="sleep_next_night">Next night</string>
     <string name="sleep_no_hypnogram">No sleep phases for this night</string>
     <string name="active_time">%1$s active</string>
+    <string name="energy">Energy</string>
+    <string name="energy_total">kcal total</string>
+    <string name="energy_active">kcal active</string>
+    <string name="energy_peak">peak kcal / 5 min</string>
+    <string name="energy_resting">Resting %1$s kcal / 5 min</string>
+    <string name="energy_coverage">data %1$s–%2$s</string>
+    <string name="energy_no_data">No energy data yet. It is downloaded from the watch together with steps and sleep.</string>
+    <string name="energy_tap_hint">Tap or drag on the chart for details</string>
+    <string name="energy_slot">%1$s: %2$s kcal, %3$d steps</string>
+    <string name="energy_slot_empty">%1$s: no data</string>
+    <string name="previous_day">Previous day</string>
+    <string name="next_day">Next day</string>
+    <string name="energy_no_data_day">No energy data for this day.</string>
+    <string name="energy_pick_date">Choose a date</string>
+    <string name="energy_zoom">Zoom</string>
 </resources>

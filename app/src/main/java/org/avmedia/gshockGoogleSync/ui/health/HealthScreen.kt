@@ -56,6 +56,11 @@ fun HealthScreen() {
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    // Energy card — 5-minute energy from the life-log (DW-H5600)
+                    if (WatchInfo.hasSleepData) {
+                        EnergyCardView(modifier = Modifier.fillMaxWidth())
+                    }
+
                     // Profile button — opens exercise profile dialog
                     AppButton(
                         text = stringResource(id = R.string.profile),
