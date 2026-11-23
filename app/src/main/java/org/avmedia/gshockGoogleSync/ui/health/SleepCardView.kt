@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -28,6 +26,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +51,7 @@ import org.avmedia.gshockGoogleSync.R
 import org.avmedia.gshockGoogleSync.data.sleep.StoredHeartRate
 import org.avmedia.gshockGoogleSync.data.sleep.StoredNight
 import org.avmedia.gshockGoogleSync.ui.common.AppCard
+import org.avmedia.gshockGoogleSync.ui.common.AppDatePickerDialog
 import org.avmedia.gshockapi.model.SleepStage
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -85,6 +90,7 @@ fun SleepCardView(
     viewModel: SleepViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    var showDatePicker by remember { mutableStateOf(false) }
 
     AppCard(modifier = modifier.fillMaxWidth()) {
         Column(
@@ -115,13 +121,27 @@ fun SleepCardView(
                 return@Column
             }
 
-            NightSelector(
-                night = night,
+            DaySelector(
+                label = night.wakeDate().format(DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault())),
                 hasOlder = state.hasOlder,
                 hasNewer = state.hasNewer,
                 onOlder = viewModel::showOlder,
                 onNewer = viewModel::showNewer,
+                onPick = { showDatePicker = true },
+                olderDescription = stringResource(R.string.sleep_previous_night),
+                newerDescription = stringResource(R.string.sleep_next_night),
             )
+            if (showDatePicker) {
+                val nightDates = state.nightDates
+                AppDatePickerDialog(
+                    initialDate = night.wakeDate(),
+                    minDate = nightDates.min(),
+                    maxDate = nightDates.max(),
+                    isSelectable = { it in nightDates },
+                    onConfirm = viewModel::select,
+                    onDismiss = { showDatePicker = false },
+                )
+            }
             state.error?.let { ErrorLine(it) }
 
             Spacer(Modifier.height(8.dp))
@@ -135,6 +155,10 @@ fun SleepCardView(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
             Spacer(Modifier.height(12.dp))
             Vitals(night)
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+            Spacer(Modifier.height(12.dp))
+            SleepChargeTrend(state.trend, onSelect = viewModel::select)
         }
     }
 }
@@ -142,33 +166,6 @@ fun SleepCardView(
 @Composable
 private fun ErrorLine(text: String) {
     Text(text = text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-}
-
-@Composable
-private fun NightSelector(
-    night: StoredNight,
-    hasOlder: Boolean,
-    hasNewer: Boolean,
-    onOlder: () -> Unit,
-    onNewer: () -> Unit,
-) {
-    val label = night.wakeDate().format(DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault()))
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        IconButton(onClick = onOlder, enabled = hasOlder) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = stringResource(R.string.sleep_previous_night))
-        }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.weight(1f),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-        IconButton(onClick = onNewer, enabled = hasNewer) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = stringResource(R.string.sleep_next_night))
-        }
-    }
 }
 
 @Composable
@@ -300,6 +297,78 @@ private fun HeartRateLine(night: StoredNight, readings: List<StoredHeartRate>) {
             color = lineColor,
             style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
+    }
+}
+
+/**
+ * Sleep charge per night over the last two weeks, ending with the selected night (highlighted).
+ * Days without a night leave a gap; the dashed line is the average of the nights shown.
+ * Tapping a bar selects that night.
+ */
+@Composable
+private fun SleepChargeTrend(days: List<SleepChargeDay>, onSelect: (java.time.LocalDate) -> Unit) {
+    val known = days.mapNotNull { it.charge }
+    if (days.isEmpty() || known.isEmpty()) return
+    val average = known.average().toFloat()
+    val barColor = MaterialTheme.colorScheme.primary
+    val gridColor = MaterialTheme.colorScheme.outlineVariant
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val dateFormat = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
+
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.sleep_charge_trend, days.size),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = stringResource(R.string.sleep_charge_average, average.roundToInt()),
+            style = MaterialTheme.typography.bodySmall,
+            color = labelColor,
+        )
+    }
+    Spacer(Modifier.height(8.dp))
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(72.dp)
+            .pointerInput(days) {
+                detectTapGestures { tap ->
+                    val day = days.getOrNull((tap.x / size.width * days.size).toInt())
+                    if (day?.charge != null) onSelect(day.date)
+                }
+            },
+    ) {
+        val slot = size.width / days.size
+        val gap = slot * 0.25f
+        fun y(charge: Float) = size.height * (1f - charge / 100f)
+        drawLine(gridColor, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx())
+        days.forEachIndexed { i, day ->
+            val charge = day.charge ?: return@forEachIndexed
+            val selected = i == days.lastIndex
+            drawRect(
+                color = if (selected) barColor else barColor.copy(alpha = 0.4f),
+                topLeft = Offset(i * slot + gap / 2, y(charge.toFloat())),
+                size = Size(slot - gap, size.height - y(charge.toFloat())),
+            )
+        }
+        drawLine(
+            color = labelColor,
+            start = Offset(0f, y(average)),
+            end = Offset(size.width, y(average)),
+            strokeWidth = 1.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())),
+        )
+    }
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = days.first().date.format(dateFormat),
+            style = MaterialTheme.typography.bodySmall,
+            color = labelColor,
+            modifier = Modifier.weight(1f),
+        )
+        Text(text = days.last().date.format(dateFormat), style = MaterialTheme.typography.bodySmall, color = labelColor)
     }
 }
 

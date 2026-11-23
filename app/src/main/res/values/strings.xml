@@ -238,6 +238,8 @@
     <string name="sleep_previous_night">Previous night</string>
     <string name="sleep_next_night">Next night</string>
     <string name="sleep_no_hypnogram">No sleep phases for this night</string>
+    <string name="sleep_charge_trend">Sleep charge, last %1$d days</string>
+    <string name="sleep_charge_average">avg %1$d</string>
     <string name="active_time">%1$s active</string>
     <string name="energy">Energy</string>
     <string name="energy_total">kcal total</string>

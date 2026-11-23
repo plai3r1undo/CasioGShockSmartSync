@@ -53,7 +53,15 @@ CRC-16/KERMIT (poly 0x1021 reflected = 0x8408, init 0, no xorout), over the on-w
 - Date stamps: 2026-11-21 night has 0x5a date 21 and 0x53 date 21, but the older nights from the first pairing
   are 0x5a 19/18 vs 0x53 18/17 (same nights, matched by span + stage totals). Library pairs by span; start time
   currently = 0x5a date (+1 day if UTC bedtime < 12:00). Needs one check against the app history.
-- Unknown 0x5a fields: d0, d1-2, d26, d31 (float 1.9/3.5/3.7), d35, d36, d47-49.
+- 0x5a fields, checked 2026-11-23 against the hypnograms of the 4 nights received so far:
+  - d0: night counter (1, 2, 4, 5 for 18, 19, 21, 22 Nov; the night of the 20th was never received).
+  - d26: probably the sleep charge rating, 1-5. It ranks like sleep charge: 60→2, 67→3, 75→4, 88→5.
+  - d31 (f32): probably sleep continuity, 1.0-5.0 (Polar scale, higher = fewer interruptions).
+    3.7 / 3.5 / 1.9 / 1.7 against 3.2 / 3.2 / 5.0 / 5.6 wake bouts per hour.
+  - d35: long interruptions in minutes. It equals the sum of wake bouts longer than 1 min in 0x53,
+    truncated: 14.5→14, 5.0→5, 33.5→33, 14.0→14.
+  - d36 (4, 5, 5, 5) and d1-2 (334, 339, 812, 1100) are still unknown.
+  - d47-49 (`07 04 04`, `ff 0e 14`, `ff 23 ff`, `ff 2a ff`): perhaps three tip ids, with ff for none.
 - 0x52 (heart rate) is understood but not yet decoded by the library; 0x56 and 0x72 are still raw.
 
 ## Implementation

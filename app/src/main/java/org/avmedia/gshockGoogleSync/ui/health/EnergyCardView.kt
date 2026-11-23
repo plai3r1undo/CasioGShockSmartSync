@@ -161,17 +161,21 @@ private fun rememberTimeFormat(withMinutes: Boolean): DateTimeFormatter {
     }
 }
 
+/** "< [date] >" row; tapping the date opens a picker. Shared by the Energy and Sleep cards. */
 @Composable
-private fun DaySelector(
+internal fun DaySelector(
     label: String,
     hasNewer: Boolean,
     onOlder: () -> Unit,
     onNewer: () -> Unit,
     onPick: () -> Unit,
+    hasOlder: Boolean = true,
+    olderDescription: String = stringResource(R.string.previous_day),
+    newerDescription: String = stringResource(R.string.next_day),
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        IconButton(onClick = onOlder) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = stringResource(R.string.previous_day))
+        IconButton(onClick = onOlder, enabled = hasOlder) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = olderDescription)
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -197,7 +201,7 @@ private fun DaySelector(
             )
         }
         IconButton(onClick = onNewer, enabled = hasNewer) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = stringResource(R.string.next_day))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = newerDescription)
         }
     }
 }

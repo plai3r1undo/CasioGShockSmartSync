@@ -15,8 +15,8 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 /**
- * Material 3 date picker dialog used across the app. Dates outside [minDate]..[maxDate]
- * are shown disabled.
+ * Material 3 date picker dialog used across the app. Dates outside [minDate]..[maxDate], or
+ * rejected by [isSelectable], are shown disabled.
  *
  * The Material 3 picker represents a day as UTC midnight, so conversions stay in UTC
  * (using the local zone would shift the day by one in zones west or east of UTC).
@@ -29,12 +29,14 @@ fun AppDatePickerDialog(
     onDismiss: () -> Unit,
     minDate: LocalDate? = null,
     maxDate: LocalDate? = null,
+    isSelectable: ((LocalDate) -> Boolean)? = null,
 ) {
-    val selectableDates = remember(minDate, maxDate) {
+    val selectableDates = remember(minDate, maxDate, isSelectable) {
         object : SelectableDates {
             override fun isSelectableDate(utcTimeMillis: Long): Boolean {
                 val date = utcMillisToDate(utcTimeMillis)
-                return (minDate == null || date >= minDate) && (maxDate == null || date <= maxDate)
+                return (minDate == null || date >= minDate) && (maxDate == null || date <= maxDate) &&
+                    (isSelectable == null || isSelectable(date))
             }
 
             override fun isSelectableYear(year: Int): Boolean =
