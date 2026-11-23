@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.avmedia.gshockGoogleSync.data.sleep.SleepSyncManager
+import org.avmedia.gshockGoogleSync.data.sleep.StoredHeartRate
 import org.avmedia.gshockGoogleSync.data.sleep.StoredNight
 import javax.inject.Inject
 
@@ -19,6 +20,8 @@ data class SleepUiState(
     val selectedIndex: Int = 0,
     val syncing: Boolean = false,
     val error: String? = null,
+    /** Heart-rate readings (0x52) during the selected night, oldest first. */
+    val heartRate: List<StoredHeartRate> = emptyList(),
 ) {
     val selected: StoredNight? get() = nights.getOrNull(selectedIndex)
     val hasOlder: Boolean get() = selectedIndex < nights.lastIndex
@@ -34,12 +37,15 @@ class SleepViewModel @Inject constructor(
     val isSupported: Boolean get() = sleepSyncManager.isSupported
 
     val state: StateFlow<SleepUiState> =
-        combine(sleepSyncManager.state, selectedIndex) { s, index ->
+        combine(sleepSyncManager.state, sleepSyncManager.activity, selectedIndex) { s, activity, index ->
+            val selected = index.coerceIn(0, (s.nights.size - 1).coerceAtLeast(0))
             SleepUiState(
                 nights = s.nights,
-                selectedIndex = index.coerceIn(0, (s.nights.size - 1).coerceAtLeast(0)),
+                selectedIndex = selected,
                 syncing = s.syncing,
                 error = s.lastError,
+                heartRate = s.nights.getOrNull(selected)
+                    ?.let { activity.heartRateBetween(it.start, it.end) }.orEmpty(),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SleepUiState())
 

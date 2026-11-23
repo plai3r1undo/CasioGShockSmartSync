@@ -54,7 +54,7 @@ CRC-16/KERMIT (poly 0x1021 reflected = 0x8408, init 0, no xorout), over the on-w
   are 0x5a 19/18 vs 0x53 18/17 (same nights, matched by span + stage totals). Library pairs by span; start time
   currently = 0x5a date (+1 day if UTC bedtime < 12:00). Needs one check against the app history.
 - Unknown 0x5a fields: d0, d1-2, d26, d31 (float 1.9/3.5/3.7), d35, d36, d47-49.
-- Files 0x50/0x51/0x52/0x56/0x72/0x65/0x00 not decoded (likely HR / activity / HRV logs). Library returns them raw.
+- 0x52 (heart rate) is understood but not yet decoded by the library; 0x56 and 0x72 are still raw.
 
 ## Implementation
 GShockAPI branch `dw-h5600-sleep` (../GShockAPI): io/LifeLogTransferIO.kt, io/SleepIOFunctional.kt, io/SleepIO.kt,
@@ -80,5 +80,11 @@ Sent in every 0x2E transfer, each record only once (like nights).
   - Bytes 10-12 are small (spread?), bytes 13-15 look like per-axis maxima, then `00×4 fe`.
   - Then a u16 (30-460), one byte (0-30) and one byte (46-127, 127 when still), then `00 00 0x 00 ff 0c 0x`.
   - Probably the motion summary behind the sleep/wear detection. Needs a reference to verify.
-- **0x52:** one 4-byte record per 2 minutes, always FEFE (empty) during the day so far. Likely heart rate, recorded only at night or during workouts.
+- **0x52 = heart rate, one record per 2 min (decoded 2026-11-23):** `<bpm u8> <quality u8> 04 08`, oldest first.
+  The last record ends at the status time rounded down to 2 min (same layout as 0x50). `fe fe` = no reading.
+  - Quality is 100/75/50/25 (0x64/0x4b/0x32/0x19). Low quality goes with outliers (mean 97 bpm at 25 vs 55 at 100).
+  - Order verified by continuity across transfers: oldest-first jumps 2.8 bpm on average at file boundaries, newest-first 6.3
+    (typical step inside a file: 5.0). The post-wake steps in 0x50 and the HR spike line up only oldest-first.
+  - Night 2026-11-22/23: readings from 21:24 to 09:36 UTC, with a gap 21:50-22:24 while walking.
+    Mean during sleep is 54 bpm (0x5a says 53). Daytime is all `fe fe`, so the watch only samples HR in its night window.
 - **0x00 offset 10 (u16):** grows with the time since the previous transfer (113 after 1 min, 953 after 61 min). Probably the amount of data pending.

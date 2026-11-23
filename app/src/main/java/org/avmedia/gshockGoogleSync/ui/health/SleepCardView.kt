@@ -34,12 +34,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import org.avmedia.gshockGoogleSync.R
+import org.avmedia.gshockGoogleSync.data.sleep.StoredHeartRate
 import org.avmedia.gshockGoogleSync.data.sleep.StoredNight
 import org.avmedia.gshockGoogleSync.ui.common.AppCard
 import org.avmedia.gshockapi.model.SleepStage
@@ -123,6 +128,7 @@ fun SleepCardView(
             ChargeRow(night)
             Spacer(Modifier.height(16.dp))
             Hypnogram(night)
+            HeartRateLine(night, state.heartRate)
             Spacer(Modifier.height(16.dp))
             StageBreakdown(night)
             Spacer(Modifier.height(12.dp))
@@ -233,6 +239,66 @@ private fun Hypnogram(night: StoredNight) {
             text = night.end.atZone(zone).format(timeFormat),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Readings below this quality (100/75/50/25) are mostly motion artefacts. */
+private const val MIN_HEART_RATE_QUALITY = 75
+
+/** Readings further apart than this are not joined (e.g. watch off the wrist). */
+private const val MAX_HEART_RATE_GAP_MS = 6 * 60_000L
+
+/**
+ * Heart rate (2-minute readings) on the same time axis as the hypnogram above, with the
+ * night's lowest and highest reading on the left.
+ */
+@Composable
+private fun HeartRateLine(night: StoredNight, readings: List<StoredHeartRate>) {
+    val points = readings.filter { it.quality >= MIN_HEART_RATE_QUALITY }
+    if (points.size < 2) return
+    val lineColor = MaterialTheme.colorScheme.error
+    val gridColor = MaterialTheme.colorScheme.outlineVariant
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val start = night.startEpochMs
+    val span = (night.endEpochMs - start).toFloat().coerceAtLeast(1f)
+    val low = points.minOf { it.bpm }
+    val high = points.maxOf { it.bpm }
+    val range = (high - low).coerceAtLeast(10).toFloat()
+
+    Spacer(Modifier.height(12.dp))
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.sleep_heart_rate),
+            style = MaterialTheme.typography.bodySmall,
+            color = labelColor,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = stringResource(R.string.sleep_heart_rate_range, low, high),
+            style = MaterialTheme.typography.bodySmall,
+            color = labelColor,
+        )
+    }
+    Spacer(Modifier.height(4.dp))
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
+    ) {
+        val pad = 3.dp.toPx()
+        fun x(r: StoredHeartRate) = ((r.startEpochMs + 60_000 - start) / span).coerceIn(0f, 1f) * size.width
+        fun y(r: StoredHeartRate) = pad + (1f - (r.bpm - low) / range) * (size.height - 2 * pad)
+        drawLine(gridColor, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx())
+        val path = Path()
+        points.forEachIndexed { i, r ->
+            val joined = i > 0 && r.startEpochMs - points[i - 1].startEpochMs <= MAX_HEART_RATE_GAP_MS
+            if (joined) path.lineTo(x(r), y(r)) else path.moveTo(x(r), y(r))
+        }
+        drawPath(
+            path,
+            color = lineColor,
+            style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
     }
 }

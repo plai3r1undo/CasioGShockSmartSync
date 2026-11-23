@@ -15,6 +15,10 @@ import java.time.temporal.ChronoUnit
 @Keep
 data class StoredStepBin(val startEpochMs: Long, val steps: Int, val kcal: Float? = null)
 
+/** Heart rate in the 2-minute interval starting at [startEpochMs]; [quality] is 100/75/50/25. */
+@Keep
+data class StoredHeartRate(val startEpochMs: Long, val bpm: Int, val quality: Int)
+
 /** The watch's latest daily totals for [date] (local date), as of [updatedEpochMs]. */
 @Keep
 data class StoredDay(
@@ -29,6 +33,7 @@ data class StoredDay(
 data class StoredActivity(
     val bins: List<StoredStepBin> = emptyList(),
     val days: List<StoredDay> = emptyList(),
+    val heartRate: List<StoredHeartRate> = emptyList(),
     /**
      * Decoder version that produced this file; older files are rebuilt from the raw archive.
      * Defaults to 0 so files written before versioning (which Gson reads through the no-arg
@@ -37,11 +42,15 @@ data class StoredActivity(
     val version: Int = 0,
 ) {
     companion object {
-        /** 2: per-interval energy (0x51). */
-        const val CURRENT_VERSION = 2
+        /** 2: per-interval energy (0x51). 3: heart rate (0x52). */
+        const val CURRENT_VERSION = 3
     }
 
     fun day(date: LocalDate): StoredDay? = days.firstOrNull { it.date == date.toString() }
+
+    /** Heart-rate readings in [from, to), oldest first. */
+    fun heartRateBetween(from: Instant, to: Instant): List<StoredHeartRate> =
+        heartRate.filter { it.startEpochMs >= from.toEpochMilli() && it.startEpochMs < to.toEpochMilli() }
 
     fun stepsBetween(from: Instant, to: Instant): Int =
         bins.filter { it.startEpochMs >= from.toEpochMilli() && it.startEpochMs < to.toEpochMilli() }
@@ -83,7 +92,7 @@ class ActivityStore(private val dir: File) {
         }.onFailure { Timber.e(it, "Cannot read stored activity") }
             .getOrDefault(StoredActivity())
             // Gson leaves missing fields null despite the Kotlin defaults.
-            .let { StoredActivity(it.bins.orEmpty(), it.days.orEmpty(), it.version) }
+            .let { StoredActivity(it.bins.orEmpty(), it.days.orEmpty(), it.heartRate.orEmpty(), it.version) }
 
     /** Deletes the stored activity (before a rebuild from the raw archive). */
     @Synchronized
@@ -97,9 +106,13 @@ class ActivityStore(private val dir: File) {
         val current = load()
         val bins = current.bins.associateBy { it.startEpochMs }.toMutableMap()
         val days = current.days.associateBy { it.date }.toMutableMap()
+        val heartRate = current.heartRate.associateBy { it.startEpochMs }.toMutableMap()
         activities.sortedBy { it.timestamp }.forEach { a ->
             a.intervals.forEach {
                 bins[it.start.toEpochMilli()] = StoredStepBin(it.start.toEpochMilli(), it.steps, it.kcal)
+            }
+            a.heartRate.forEach {
+                heartRate[it.start.toEpochMilli()] = StoredHeartRate(it.start.toEpochMilli(), it.bpm, it.quality)
             }
             val date = a.timestamp.atZone(zone).toLocalDate().toString()
             val previous = days[date]
@@ -117,6 +130,7 @@ class ActivityStore(private val dir: File) {
         val merged = StoredActivity(
             bins = bins.values.filter { it.startEpochMs >= keepBinsFrom }.sortedBy { it.startEpochMs },
             days = days.values.sortedBy { it.date },
+            heartRate = heartRate.values.filter { it.startEpochMs >= keepBinsFrom }.sortedBy { it.startEpochMs },
             version = StoredActivity.CURRENT_VERSION,
         )
         dir.mkdirs()

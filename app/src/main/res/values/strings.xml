@@ -228,6 +228,7 @@
     <string name="sleep_light">Light</string>
     <string name="sleep_deep">Deep</string>
     <string name="sleep_heart_rate">Heart rate</string>
+    <string name="sleep_heart_rate_range">%1$d–%2$d bpm</string>
     <string name="sleep_hrv">Heart rate variability</string>
     <string name="sleep_breathing">Breathing rate</string>
     <string name="sleep_baseline">usual %1$s</string>

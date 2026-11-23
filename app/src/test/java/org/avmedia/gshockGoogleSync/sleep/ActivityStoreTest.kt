@@ -3,6 +3,7 @@ package org.avmedia.gshockGoogleSync.sleep
 import org.avmedia.gshockGoogleSync.data.sleep.ActivityStore
 import org.avmedia.gshockGoogleSync.data.sleep.StoredActivity
 import org.avmedia.gshockGoogleSync.ui.health.toStepCounterData
+import org.avmedia.gshockapi.model.HeartRateSample
 import org.avmedia.gshockapi.model.LifeLogActivity
 import org.avmedia.gshockapi.model.StepInterval
 import org.junit.Assert.assertEquals
@@ -61,5 +62,23 @@ class ActivityStoreTest {
         // A file from the first version (no version, no kcal) must be detected as old.
         java.io.File(tmp.root, "activity.json").writeText("""{"bins":[{"startEpochMs":1,"steps":2}],"days":[]}""")
         assertEquals(0, store.load().version)
+    }
+
+    @Test
+    fun keepsHeartRateAcrossTransfers() {
+        val store = ActivityStore(tmp.root)
+        fun hr(at: String, vararg samples: Pair<String, Int>) = activity(at, 0).copy(
+            heartRate = samples.map { (start, bpm) -> HeartRateSample(Instant.parse(start), bpm, 100) },
+        )
+        store.merge(listOf(hr("2026-11-22T23:26:00Z", "2026-11-22T23:22:00Z" to 54, "2026-11-22T23:24:00Z" to 52)), zone)
+        store.merge(listOf(hr("2026-11-23T00:26:00Z", "2026-11-22T23:26:00Z" to 51)), zone)
+
+        val loaded = ActivityStore(tmp.root).load()
+        assertEquals(listOf(54, 52, 51), loaded.heartRate.map { it.bpm })
+        assertEquals(
+            listOf(52, 51),
+            loaded.heartRateBetween(Instant.parse("2026-11-22T23:24:00Z"), Instant.parse("2026-11-23T08:00:00Z"))
+                .map { it.bpm },
+        )
     }
 }
