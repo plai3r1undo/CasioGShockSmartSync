@@ -238,6 +238,12 @@
     <string name="sleep_previous_night">Previous night</string>
     <string name="sleep_next_night">Next night</string>
     <string name="sleep_no_hypnogram">No sleep phases for this night</string>
+    <string name="health_export">Export data</string>
+    <string name="health_import">Import data</string>
+    <string name="health_export_done">Exported %1$d files</string>
+    <string name="health_export_failed">Export failed</string>
+    <string name="health_import_done">Imported %1$d new watch files</string>
+    <string name="health_import_failed">Import failed: not a health data backup</string>
     <string name="sleep_charge_trend">Sleep charge, last %1$d days</string>
     <string name="sleep_charge_average">avg %1$d</string>
     <string name="active_time">%1$s active</string>

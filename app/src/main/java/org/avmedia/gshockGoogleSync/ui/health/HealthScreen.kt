@@ -1,6 +1,11 @@
 package org.avmedia.gshockGoogleSync.ui.health
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.collectAsState
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -70,6 +75,8 @@ fun HealthScreen() {
                             .padding(horizontal = 16.dp)
                     )
 
+                    HealthBackupButtons()
+
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
@@ -80,6 +87,38 @@ fun HealthScreen() {
     if (showProfileDialog) {
         ProfileDialog(
             onDismiss = { showProfileDialog = false }
+        )
+    }
+}
+
+/** Export / import of all health data as a zip, through the system file picker. */
+@Composable
+private fun HealthBackupButtons(viewModel: HealthBackupViewModel = hiltViewModel()) {
+    val busy by viewModel.busy.collectAsState()
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri -> uri?.let(viewModel::export) }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(viewModel::import) }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+    ) {
+        AppButton(
+            text = stringResource(R.string.health_export),
+            onClick = { exportLauncher.launch(viewModel.suggestedFileName()) },
+            enabled = !busy,
+            modifier = Modifier.weight(1f),
+        )
+        AppButton(
+            text = stringResource(R.string.health_import),
+            onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
+            enabled = !busy,
+            modifier = Modifier.weight(1f),
         )
     }
 }

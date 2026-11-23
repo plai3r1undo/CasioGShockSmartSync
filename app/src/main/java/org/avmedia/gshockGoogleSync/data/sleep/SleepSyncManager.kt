@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.avmedia.gshockGoogleSync.data.repository.GShockRepository
 import org.avmedia.gshockapi.WatchInfo
@@ -38,6 +39,7 @@ class SleepSyncManager @Inject constructor(
     private val dir = File(context.filesDir, "sleep")
     private val store = SleepStore(dir)
     private val activityStore = ActivityStore(dir)
+    private val backup = HealthBackup(dir)
     private val mutex = Mutex()
 
     private val _activity = MutableStateFlow(loadActivity())
@@ -94,6 +96,30 @@ class SleepSyncManager @Inject constructor(
         }
     }
 
+    /** Writes a zip backup of all health data to [out]. Returns the number of files written. */
+    suspend fun exportTo(out: java.io.OutputStream): Int = withContext(Dispatchers.IO) {
+        mutex.withLock { backup.export(out) }
+    }
+
+    /**
+     * Imports a backup written by [exportTo]: adds the raw files missing on the phone, then
+     * decodes nights and activity again from the whole raw archive. Nights already on the
+     * phone are kept; nights only in the backup's nights.json are added.
+     */
+    suspend fun importFrom(input: java.io.InputStream): HealthImportResult = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val result = backup.import(input)
+            val known = store.load().map { it.recordDate }.toSet()
+            store.merge(result.nights.filter { it.recordDate !in known })
+            val nights = store.merge(decodeNightsFromRaw())
+            val archived = store.archivedTransfers().mapNotNull(ActivityIOFunctional::parse)
+            if (archived.isNotEmpty()) _activity.value = activityStore.merge(archived)
+            _state.update { it.copy(nights = nights) }
+            Timber.i("Imported health backup: ${result.rawFilesAdded} raw file(s), ${nights.size} night(s)")
+            result
+        }
+    }
+
     /**
      * Loads stored activity. When there is no activity file yet, or it was written by an older
      * decoder, it is rebuilt from the raw transfers archived on every sync.
@@ -120,16 +146,19 @@ class SleepSyncManager @Inject constructor(
     private fun loadNights(): List<StoredNight> =
         runCatching {
             if (store.nightsVersion() >= NIGHTS_VERSION) return@runCatching store.load()
-            val nights = store.archivedTransfers()
-                .filter { files -> files.any { it.id == SleepIOFunctional.FILE_NIGHTLY_RECHARGE } }
-                .flatMap { files -> SleepIOFunctional.combine(files).nights }
-                .map(StoredNight::from)
+            val nights = decodeNightsFromRaw()
             val merged = store.merge(nights)
             store.setNightsVersion(NIGHTS_VERSION)
             Timber.i("Re-decoded ${nights.size} night(s) from the raw archive")
             merged
         }.onFailure { Timber.e(it, "Cannot load sleep nights") }
             .getOrElse { store.load() }
+
+    private fun decodeNightsFromRaw(): List<StoredNight> =
+        store.archivedTransfers()
+            .filter { files -> files.any { it.id == SleepIOFunctional.FILE_NIGHTLY_RECHARGE } }
+            .flatMap { files -> SleepIOFunctional.combine(files).nights }
+            .map(StoredNight::from)
 
     private companion object {
         const val NIGHTS_VERSION = 2
