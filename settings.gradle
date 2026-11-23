@@ -24,7 +24,7 @@ include ':app'
 if (providers.gradleProperty('localGShockApi').getOrElse('false') == 'true') {
     includeBuild('../GShockAPI') {
         dependencySubstitution {
-            substitute module('com.github.izivkov:GShockAPI') using project(':api')
+            substitute module('com.github.plai3r1undo:GShockAPI') using project(':api')
         }
     }
 }
