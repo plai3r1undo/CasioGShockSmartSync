@@ -146,7 +146,7 @@ private fun NightSelector(
     onOlder: () -> Unit,
     onNewer: () -> Unit,
 ) {
-    val label = night.date.format(DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault()))
+    val label = night.wakeDate().format(DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault()))
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         IconButton(onClick = onOlder, enabled = hasOlder) {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = stringResource(R.string.sleep_previous_night))

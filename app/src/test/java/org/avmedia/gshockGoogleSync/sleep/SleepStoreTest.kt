@@ -52,4 +52,19 @@ class SleepStoreTest {
         assertEquals("-7.9", formatAnsCharge(-7.998f))
         assertEquals("8:27", formatHm(507))
     }
+
+    @Test
+    fun labelsNightByWakeDateAndTracksVersion() {
+        // Watch date 2026-11-22, slept 00:36-09:27 CET on the 23rd.
+        val n = night("2026-11-22", 75).copy(
+            startEpochMs = java.time.Instant.parse("2026-11-22T23:36:00Z").toEpochMilli(),
+            endEpochMs = java.time.Instant.parse("2026-11-23T08:27:00Z").toEpochMilli(),
+        )
+        assertEquals(java.time.LocalDate.parse("2026-11-23"), n.wakeDate(java.time.ZoneId.of("Europe/Rome")))
+
+        val store = SleepStore(tmp.root)
+        assertEquals(1, store.nightsVersion())
+        store.setNightsVersion(2)
+        assertEquals(2, SleepStore(tmp.root).nightsVersion())
+    }
 }

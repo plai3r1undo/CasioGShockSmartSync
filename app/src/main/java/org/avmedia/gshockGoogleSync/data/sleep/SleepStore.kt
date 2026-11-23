@@ -40,7 +40,11 @@ data class StoredNight(
     val stageCodes: List<Int>? = null,
     val rawHex: String = "",
 ) {
+    /** The watch's date for the night: the UTC date of the sleep start (unique key). */
     val date: LocalDate get() = LocalDate.parse(recordDate)
+
+    /** Date shown to the user: the local date on which the night ended (the morning). */
+    fun wakeDate(zone: ZoneId = ZoneId.systemDefault()): LocalDate = end.atZone(zone).toLocalDate()
     val start: Instant get() = Instant.ofEpochMilli(startEpochMs)
     val end: Instant get() = Instant.ofEpochMilli(endEpochMs)
     val interruptionsMin: Int get() = (spanMin - actualSleepMin).coerceAtLeast(0)
@@ -88,6 +92,7 @@ data class StoredNight(
 class SleepStore(private val dir: File) {
     private val gson = Gson()
     private val nightsFile get() = File(dir, "nights.json")
+    private val versionFile get() = File(dir, "nights.version")
     private val rawDir get() = File(dir, "raw")
 
     @Synchronized
@@ -113,6 +118,19 @@ class SleepStore(private val dir: File) {
             tmp.delete()
         }
         return merged
+    }
+
+    /**
+     * Decoder version of the stored nights. 2: sleep start = record date at the UTC bedtime
+     * (version 1 put nights starting after local midnight a day early).
+     */
+    @Synchronized
+    fun nightsVersion(): Int = runCatching { versionFile.readText().trim().toInt() }.getOrDefault(1)
+
+    @Synchronized
+    fun setNightsVersion(version: Int) {
+        dir.mkdirs()
+        versionFile.writeText(version.toString())
     }
 
     @Synchronized

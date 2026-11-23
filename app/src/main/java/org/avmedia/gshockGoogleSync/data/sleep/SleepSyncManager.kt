@@ -12,6 +12,7 @@ import kotlinx.coroutines.withContext
 import org.avmedia.gshockGoogleSync.data.repository.GShockRepository
 import org.avmedia.gshockapi.WatchInfo
 import org.avmedia.gshockapi.io.ActivityIOFunctional
+import org.avmedia.gshockapi.io.SleepIOFunctional
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
@@ -44,7 +45,7 @@ class SleepSyncManager @Inject constructor(
     /** Daytime activity (steps, kcal, active time) from the same transfers. */
     val activity: StateFlow<StoredActivity> = _activity.asStateFlow()
 
-    private val _state = MutableStateFlow(SleepSyncState(nights = store.load()))
+    private val _state = MutableStateFlow(SleepSyncState(nights = loadNights()))
     val state: StateFlow<SleepSyncState> = _state.asStateFlow()
 
     val isSupported: Boolean get() = WatchInfo.hasSleepData
@@ -111,4 +112,26 @@ class SleepSyncManager @Inject constructor(
             }
         }.onFailure { Timber.e(it, "Cannot load activity") }
             .getOrDefault(StoredActivity())
+
+    /**
+     * Loads stored nights. Nights decoded by an older version are decoded again from the
+     * archived raw transfers (the watch never sends a night twice, so the archive is the source).
+     */
+    private fun loadNights(): List<StoredNight> =
+        runCatching {
+            if (store.nightsVersion() >= NIGHTS_VERSION) return@runCatching store.load()
+            val nights = store.archivedTransfers()
+                .filter { files -> files.any { it.id == SleepIOFunctional.FILE_NIGHTLY_RECHARGE } }
+                .flatMap { files -> SleepIOFunctional.combine(files).nights }
+                .map(StoredNight::from)
+            val merged = store.merge(nights)
+            store.setNightsVersion(NIGHTS_VERSION)
+            Timber.i("Re-decoded ${nights.size} night(s) from the raw archive")
+            merged
+        }.onFailure { Timber.e(it, "Cannot load sleep nights") }
+            .getOrElse { store.load() }
+
+    private companion object {
+        const val NIGHTS_VERSION = 2
+    }
 }
