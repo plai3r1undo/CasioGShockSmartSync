@@ -96,3 +96,21 @@ Sent in every 0x2E transfer, each record only once (like nights).
   - Night 2026-11-22/23: readings from 21:24 to 09:36 UTC, with a gap 21:50-22:24 while walking.
     Mean during sleep is 54 bpm (0x5a says 53). Daytime is all `fe fe`, so the watch only samples HR in its night window.
 - **0x00 offset 10 (u16):** grows with the time since the previous transfer (113 after 1 min, 953 after 61 min). Probably the amount of data pending.
+
+## Almanac location (register 0x24, decoded 2026-11-23)
+
+The almanac (sunrise, sunset, moon age) is computed on the watch from the location of world-time
+city 0. Nothing else fills it, so without this write the almanac stays empty.
+
+During its time-setting sequence the official app writes one 20-byte record per city to `26eb002d`:
+
+```
+24 <slot> 01 <latitude f64 BE> <longitude f64 BE> <source>
+24 01 01 4044f065e8922531 c055e84ea4a8c155 01      CHICAGO, 41.87811 / -87.6298
+```
+
+- source `04`: the phone's position (sent for city 0); `01`: the city's own coordinates.
+- Same layout as the GW-BX5600 time-slot record (GwBx5600TimeIO).
+- The official app also wrote `25 18 18 17 20 01 01` just before; it is not needed (verified: the
+  almanac filled in with only the 0x24 write) and is still undecoded.
+- Implemented in GShockAPI `AlmanacIO`, written after the world cities on every time sync.

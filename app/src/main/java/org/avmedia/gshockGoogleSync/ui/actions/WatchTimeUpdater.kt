@@ -4,6 +4,7 @@ import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.avmedia.gshockGoogleSync.data.repository.GShockRepository
 import org.avmedia.gshockGoogleSync.scratchpad.TimeSettingsStorage
+import org.avmedia.gshockGoogleSync.services.LocationProvider
 import org.avmedia.gshockGoogleSync.ui.time.SolarTimeHelper
 import org.avmedia.gshockGoogleSync.utils.LocalDataStorage
 import timber.log.Timber
@@ -27,6 +28,11 @@ class WatchTimeUpdater @Inject constructor(
         val timeZoneOffset = SolarTimeHelper.calculateTimeOffset(context, timeZoneOption)
 
         Timber.d("Setting time to watch with fine adjustment: $timeZoneOption $fineAdjustment and timezone offset: $timeZoneOffset")
+
+        // Watches with an almanac compute sunrise/sunset from this; without the location
+        // permission the library falls back to the home city's coordinates.
+        val location = LocationProvider.getLocation(context)
+        api.setAlmanacLocation(location?.latitude, location?.longitude)
 
         // Keep timeMs NULL so we get system time just before sending it for better accuracy.
         api.setTime(timeMs = null, offsetFormSystemTime = fineAdjustment + timeZoneOffset)
