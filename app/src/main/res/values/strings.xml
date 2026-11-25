@@ -246,6 +246,16 @@
     <string name="health_import_failed">Import failed: not a health data backup</string>
     <string name="sleep_charge_trend">Sleep charge, last %1$d days</string>
     <string name="sleep_charge_average">avg %1$d</string>
+    <string name="watch_not_connected">Watch not connected</string>
+    <string name="watch_not_connected_screen">This screen reads its values from the watch. It appears as soon as the watch connects.</string>
+    <string name="watch_not_connected_warning">The app keeps trying to connect in the background. Health data saved on the phone is still available; time, alarms and watch settings load once the watch connects.</string>
+    <string name="my_watches">My watches</string>
+    <string name="my_watches_none">No watch paired</string>
+    <string name="my_watches_connected">Connected</string>
+    <string name="my_watches_not_connected">Not connected</string>
+    <string name="my_watches_remove">Remove</string>
+    <string name="my_watches_remove_title">Remove %1$s?</string>
+    <string name="my_watches_remove_text">The watch is unpaired from this app. Health data already saved on the phone is kept. To use the watch again, pair it with Add watch.</string>
     <string name="sleep_note_title">Note · %1$s</string>
     <string name="sleep_note_empty">No note for this day</string>
     <string name="sleep_note_hint">What happened that day? (late coffee, training, stress…)</string>

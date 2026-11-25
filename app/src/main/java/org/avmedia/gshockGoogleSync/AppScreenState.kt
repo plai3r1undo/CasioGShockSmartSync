@@ -5,9 +5,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import org.avmedia.gshockGoogleSync.pairing.PairedWatchState
+import org.avmedia.gshockGoogleSync.session.ConnectionButton
 import org.avmedia.gshockGoogleSync.session.EntryReason
 import org.avmedia.gshockGoogleSync.session.SessionManager
 import org.avmedia.gshockGoogleSync.session.SessionPhase
@@ -30,21 +32,42 @@ data class AppNavigationState(
 )
 
 /**
- * The screen to show, derived entirely from the watch [SessionState]. Nothing navigates imperatively:
- * the Session decides where the app is, and this maps it to a screen.
+ * The screen to show, derived from the watch [SessionState] and whether a watch is paired.
+ * Nothing navigates imperatively: the Session decides where the app is, and this maps it to a screen.
+ *
+ * With a paired watch the main screens stay up whether or not the watch is connected; the
+ * pairing (pre-connection) screen is only for the first setup.
  */
 @Singleton
 class AppScreenState @Inject constructor(
-    sessionManager: SessionManager
+    sessionManager: SessionManager,
+    pairedWatchState: PairedWatchState,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    val state: StateFlow<AppNavigationState> = sessionManager.sessionState
-        .map { navigationFor(it) }
-        .distinctUntilChanged()
-        .stateIn(scope, SharingStarted.Eagerly, navigationFor(sessionManager.sessionState.value))
+    val state: StateFlow<AppNavigationState> =
+        combine(sessionManager.sessionState, pairedWatchState.hasPairedWatch, ::navigationFor)
+            .distinctUntilChanged()
+            .stateIn(
+                scope,
+                SharingStarted.Eagerly,
+                navigationFor(sessionManager.sessionState.value, pairedWatchState.hasPairedWatch.value),
+            )
 
     companion object {
+        internal fun navigationFor(session: SessionState, hasPairedWatch: Boolean): AppNavigationState {
+            val phase = session.phase
+            if (hasPairedWatch && phase !is SessionPhase.Ready) {
+                val closedWithError = phase is SessionPhase.Closed && phase.isError
+                return AppNavigationState(
+                    AppScreen.MAIN_NAVIGATION,
+                    errorMessage = (phase as? SessionPhase.Closed)?.reason
+                        ?.takeIf { closedWithError && it.isNotBlank() },
+                )
+            }
+            return navigationFor(session)
+        }
+
         internal fun navigationFor(session: SessionState): AppNavigationState =
             when (val phase = session.phase) {
                 SessionPhase.Disconnected -> AppNavigationState(AppScreen.INITIAL)
@@ -57,7 +80,11 @@ class AppScreenState @Inject constructor(
                         session.isRunningActions -> AppScreen.RUN_ACTIONS
                         else -> when (phase.entryReason) {
                             EntryReason.NORMAL -> AppScreen.MAIN_NAVIGATION
-                            EntryReason.CONTENT_SELECTOR -> AppScreen.CONTENT_SELECTOR
+                            // An always-connected watch connects in the background: open the
+                            // main screens directly (there used to be a "hold to unlock" cover).
+                            EntryReason.CONTENT_SELECTOR ->
+                                if (session.button == ConnectionButton.ALWAYS_CONNECTED) AppScreen.MAIN_NAVIGATION
+                                else AppScreen.CONTENT_SELECTOR
                             EntryReason.RUN_ACTIONS -> AppScreen.RUN_ACTIONS
                         }
                     }

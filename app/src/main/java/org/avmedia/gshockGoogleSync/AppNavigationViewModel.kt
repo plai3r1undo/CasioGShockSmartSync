@@ -16,9 +16,4 @@ class AppNavigationViewModel @Inject constructor(
 ) : ViewModel() {
     val state = screenState.state
     val sessionState = sessionManager.sessionState
-
-    /** The user left the entry screen (e.g. unlocked the cover). */
-    fun showMainNavigation() {
-        sessionManager.activeSession?.enterMainNavigation()
-    }
 }

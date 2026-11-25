@@ -29,11 +29,12 @@ import org.avmedia.gshockGoogleSync.ui.common.ButtonsRow
 import org.avmedia.gshockGoogleSync.ui.common.InfoButton
 import org.avmedia.gshockGoogleSync.ui.common.ScreenTitle
 import org.avmedia.gshockGoogleSync.ui.common.WatchFeature
+import org.avmedia.gshockGoogleSync.ui.common.WatchNotConnectedCard
 import org.avmedia.gshockGoogleSync.utils.Utils
 
 @SuppressLint("MutableCollectionMutableState")
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(isWatchConnected: Boolean = true) {
     GShockSmartSyncTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -48,9 +49,20 @@ fun SettingsScreen() {
                         .padding(0.dp)
                         .fillMaxWidth()
                 ) {
-                    SettingsList()
+                    MyWatchesCard(
+                        isWatchConnected = isWatchConnected,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                    // The rest are settings stored on the watch: they need it connected.
+                    if (isWatchConnected) {
+                        SettingsList()
+                    } else {
+                        WatchNotConnectedCard()
+                    }
                 }
-                BottomRow(modifier = Modifier.fillMaxWidth())
+                if (isWatchConnected) {
+                    BottomRow(modifier = Modifier.fillMaxWidth())
+                }
             }
         }
     }

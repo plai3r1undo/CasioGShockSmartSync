@@ -40,6 +40,9 @@ import org.avmedia.gshockGoogleSync.services.InactivityHandler
 import org.avmedia.gshockGoogleSync.ui.actions.ActionsScreen
 import org.avmedia.gshockGoogleSync.ui.alarms.AlarmsScreen
 import org.avmedia.gshockGoogleSync.ui.common.AppSnackbar
+import org.avmedia.gshockGoogleSync.ui.common.WatchNotConnectedWarning
+import org.avmedia.gshockGoogleSync.ui.common.WatchRequired
+import org.avmedia.gshockapi.WatchInfo
 import org.avmedia.gshockGoogleSync.ui.events.EventsScreen
 import org.avmedia.gshockGoogleSync.ui.health.HealthScreen
 import org.avmedia.gshockGoogleSync.ui.settings.SettingsScreen
@@ -52,6 +55,7 @@ import kotlin.time.Duration.Companion.seconds
 @Composable
 fun BottomNavigationBarWithPermissions(
     repository: GShockRepository,
+    isWatchConnected: Boolean,
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -67,10 +71,16 @@ fun BottomNavigationBarWithPermissions(
 
     val inactivityHandler = remember {
         InactivityHandler(timeout = (3 * 60).seconds) {
-            repository.disconnect()
-            AppSnackbar(appContext.getString(R.string.disconnected_due_to_inactivity))
+            // Always-connected watches keep their link for background syncs (health data):
+            // dropping it while the app is open would only make it reconnect every 3 minutes.
+            if (repository.isConnected() && !WatchInfo.alwaysConnected) {
+                repository.disconnect()
+                AppSnackbar(appContext.getString(R.string.disconnected_due_to_inactivity))
+            }
         }
     }
+
+    WatchNotConnectedWarning(isConnected = isWatchConnected)
 
     DisposableEffect(navController) {
         val subscription = ProgressEvents.subscribe(arrayOf(
@@ -148,19 +158,19 @@ fun BottomNavigationBarWithPermissions(
             modifier = Modifier.padding(paddingValues = paddingValues)
         ) {
             composable(Screens.Time.route) {
-                TimeScreen()
+                WatchRequired(isWatchConnected) { TimeScreen() }
             }
             composable(Screens.Health.route) {
                 HealthScreen()
             }
             composable(Screens.Alarms.route) {
-                AlarmsScreen()
+                WatchRequired(isWatchConnected) { AlarmsScreen() }
             }
             composable(Screens.Events.route) {
                 NavigateWithPermissions(
                     listOf(READ_CALENDAR),
                     navController,
-                    destinationScreen = { EventsScreen() },
+                    destinationScreen = { WatchRequired(isWatchConnected) { EventsScreen() } },
                     stringResource(
                         R.string.calendar_permission_denied_cannot_access_events,
                     )
@@ -187,7 +197,7 @@ fun BottomNavigationBarWithPermissions(
                 )
             }
             composable(Screens.Settings.route) {
-                SettingsScreen()
+                SettingsScreen(isWatchConnected = isWatchConnected)
             }
         }
     }

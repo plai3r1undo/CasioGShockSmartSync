@@ -11,7 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import org.avmedia.gshockGoogleSync.session.ConnectionButton
-import org.avmedia.gshockGoogleSync.ui.others.CoverScreen
+import org.avmedia.gshockGoogleSync.session.SessionPhase
 import org.avmedia.gshockGoogleSync.ui.others.PreConnectionScreen
 import org.avmedia.gshockGoogleSync.ui.others.RunActionsScreen
 import org.avmedia.gshockGoogleSync.ui.others.RunFindPhoneScreen
@@ -22,6 +22,8 @@ fun AppNavigationHost(
     viewModel: AppNavigationViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val sessionState by viewModel.sessionState.collectAsState()
+    val isWatchConnected = sessionState.phase is SessionPhase.Ready
     val companionDeviceCoordinator = viewModel.companionDeviceCoordinator
 
     LaunchedEffect(state.screen) {
@@ -39,7 +41,10 @@ fun AppNavigationHost(
             AppScreen.INITIAL, AppScreen.PRE_CONNECTION -> PreConnectionScreen()
             AppScreen.CONTENT_SELECTOR -> ContentSelector(viewModel)
             AppScreen.MAIN_NAVIGATION ->
-                BottomNavigationBarWithPermissions(repository = viewModel.repository)
+                BottomNavigationBarWithPermissions(
+                    repository = viewModel.repository,
+                    isWatchConnected = isWatchConnected,
+                )
             AppScreen.RUN_ACTIONS -> RunActionsScreen()
             AppScreen.ERROR -> PreConnectionScreen()
         }
@@ -51,15 +56,9 @@ private fun ContentSelector(viewModel: AppNavigationViewModel) {
     val repository = viewModel.repository
     val sessionState by viewModel.sessionState.collectAsState()
     when (sessionState.button) {
-        ConnectionButton.ALWAYS_CONNECTED -> {
-            CoverScreen(
-                onUnlock = viewModel::showMainNavigation,
-                isConnected = repository.isConnected()
-            )
-        }
-
         ConnectionButton.FROM_ACTION, ConnectionButton.AUTOMATIC_SYNC -> RunActionsScreen()
         ConnectionButton.FIND -> RunFindPhoneScreen()
-        ConnectionButton.NORMAL, null -> BottomNavigationBarWithPermissions(repository = repository)
+        ConnectionButton.NORMAL, ConnectionButton.ALWAYS_CONNECTED, null ->
+            BottomNavigationBarWithPermissions(repository = repository, isWatchConnected = true)
     }
 }

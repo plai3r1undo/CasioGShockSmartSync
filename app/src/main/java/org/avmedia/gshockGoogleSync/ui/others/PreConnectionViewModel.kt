@@ -22,6 +22,7 @@ import org.avmedia.gshockGoogleSync.GShockApplication
 import org.avmedia.gshockGoogleSync.R
 import org.avmedia.gshockGoogleSync.data.repository.GShockRepository
 import org.avmedia.gshockGoogleSync.pairing.CompanionDeviceCoordinator
+import org.avmedia.gshockGoogleSync.pairing.PairedWatchState
 import org.avmedia.gshockGoogleSync.session.SessionManager
 import org.avmedia.gshockGoogleSync.utils.LocalDataStorage
 import org.avmedia.gshockapi.ICDPDelegate
@@ -53,6 +54,8 @@ constructor(
     data class DeviceItem(val name: String, val address: String, val isLastUsed: Boolean)
 
     @Inject lateinit var companionDeviceCoordinator: CompanionDeviceCoordinator
+
+    @Inject lateinit var pairedWatchState: PairedWatchState
 
     private val _pairedDevices = MutableStateFlow<List<DeviceItem>>(emptyList())
     val pairedDevices: StateFlow<List<DeviceItem>> = _pairedDevices
@@ -155,6 +158,7 @@ constructor(
         }
 
         _pairedDevices.value = formatDeviceNames(items)
+        if (::pairedWatchState.isInitialized) pairedWatchState.refresh()
     }
 
     private fun formatDeviceNames(items: List<DeviceItem>): List<DeviceItem> {

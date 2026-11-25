@@ -46,10 +46,39 @@ class AppScreenStateTest {
         val running = ready(EntryReason.CONTENT_SELECTOR, ConnectionButton.ALWAYS_CONNECTED, runningActions = true)
         assertEquals(AppScreen.RUN_ACTIONS, screenFor(running).screen)
 
+        // An always-connected watch has no cover screen any more: back to the main screens.
         assertEquals(
-            AppScreen.CONTENT_SELECTOR,
+            AppScreen.MAIN_NAVIGATION,
             screenFor(running.copy(isRunningActions = false)).screen
         )
+        // Watch-button connections (find phone) still use the content selector.
+        assertEquals(
+            AppScreen.CONTENT_SELECTOR,
+            screenFor(ready(EntryReason.CONTENT_SELECTOR, ConnectionButton.FIND)).screen
+        )
+    }
+
+    @Test
+    fun pairedWatchShowsMainScreensWhileNotConnected() {
+        fun paired(state: SessionState) = AppScreenState.navigationFor(state, hasPairedWatch = true).screen
+        assertEquals(AppScreen.MAIN_NAVIGATION, paired(SessionState()))
+        assertEquals(AppScreen.MAIN_NAVIGATION, paired(SessionState(phase = SessionPhase.Connecting)))
+        assertEquals(
+            AppScreen.MAIN_NAVIGATION,
+            paired(SessionState(phase = SessionPhase.Closed("Watch Disconnected"), button = ConnectionButton.NORMAL)),
+        )
+        val error = AppScreenState.navigationFor(
+            SessionState(phase = SessionPhase.Closed("Connection failed", isError = true)), hasPairedWatch = true,
+        )
+        assertEquals(AppScreen.MAIN_NAVIGATION, error.screen)
+        assertEquals("Connection failed", error.errorMessage)
+        // Watch-triggered screens still win once connected.
+        assertEquals(AppScreen.RUN_ACTIONS, paired(ready(EntryReason.RUN_ACTIONS)))
+    }
+
+    @Test
+    fun withoutPairedWatchTheSetupScreenIsShown() {
+        assertEquals(AppScreen.INITIAL, AppScreenState.navigationFor(SessionState(), hasPairedWatch = false).screen)
     }
 
     @Test

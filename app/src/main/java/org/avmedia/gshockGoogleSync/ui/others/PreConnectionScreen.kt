@@ -104,6 +104,141 @@ fun PreConnectionScreen(
     val watchName by ptrConnectionViewModel.watchName.collectAsState()
     val triggerPairing by ptrConnectionViewModel.triggerPairing.collectAsState()
     val pairedDevices by ptrConnectionViewModel.pairedDevices.collectAsState()
+
+    val addWatch = rememberAddWatch(ptrConnectionViewModel)
+
+    LaunchedEffect(triggerPairing) {
+        if (triggerPairing) {
+            ptrConnectionViewModel.associate(
+                context,
+                object : ICDPDelegate {
+                    override fun onChooserReady(chooserLauncher: IntentSender) {
+                        addWatch.launchChooser(chooserLauncher)
+                        ptrConnectionViewModel.onPairingTriggered()
+                    }
+
+                    override fun onError(error: String) {
+                        AppSnackbar("Auto-pairing error: $error")
+                        ptrConnectionViewModel.onPairingTriggered()
+                    }
+                }
+            )
+        }
+    }
+
+    GShockSmartSyncTheme {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(modifier = Modifier
+                .fillMaxSize()
+                .systemBarsPadding()) {
+                AppCard(modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        WatchScreen(
+                            modifier = Modifier.fillMaxSize(),
+                            imageResId =
+                                when {
+                                    // Before the GA/GW checks: "ABL-100WE" contains neither, but
+                                    // keep it first so the more specific model always wins.
+                                    "ABL" in watchName -> R.drawable.abl_100we
+
+                                    "GA" in watchName || "GMA" in watchName ->
+                                        R.drawable.ga_b2100
+
+                                    "GW" in watchName || "GMW" in watchName ->
+                                        R.drawable.gw_b5600
+
+                                    "DW-H5600" in watchName -> R.drawable.dw_h5600
+                                    "DW" in watchName || "DMW" in watchName ->
+                                        R.drawable.dw_b5600
+
+                                    "ECB" in watchName -> R.drawable.ecb_30d
+                                    else -> R.drawable.gw_b5600
+                                },
+                            isAlwaysConnected = "DW-H5600" in watchName || "ECB" in watchName
+                        )
+
+                        AppConnectionSpinner(
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+
+                        AppCard(
+                            modifier =
+                                Modifier
+                                    .align(Alignment.BottomStart)
+                                    .padding(start = 0.dp, bottom = 16.dp)
+                                    .fillMaxWidth(0.5f)
+                                    .fillMaxHeight(1f - GUIDELINE_LIST_TOP)
+                        ) {
+                            PairedDeviceList(
+                                devices = pairedDevices,
+                                onSelect = { device ->  // ← IMPLEMENT THIS
+                                    ptrConnectionViewModel.setDevice(
+                                        Utils.sanitizeMacAddress(device.address),
+                                        device.name
+                                    )
+                                },
+                                onDisassociate = { device ->
+                                    ptrConnectionViewModel.disassociate(
+                                        context,
+                                        Utils.sanitizeMacAddress(device.address)
+                                    )
+                                    scope.launch(Dispatchers.IO) {
+                                        LocalDataStorage.removeDeviceAddress(
+                                            context,
+                                            device.address
+                                        )
+                                    }
+                                },
+                                modifier = Modifier
+                                    .padding(8.dp)
+                                    .fillMaxWidth()
+                            )
+                        }
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 30.dp, end = 30.dp)
+                        ) {
+                            InfoButton(
+                                infoText =
+                                    stringResource(R.string.connection_screen_info) +
+                                            " v" +
+                                            BuildConfig.VERSION_NAME
+                            )
+                        }
+
+                        PairButton(
+                            modifier =
+                                Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(bottom = 30.dp, end = 30.dp),
+                            isFlashing = pairedDevices.isEmpty(),
+                            onClick = addWatch.start,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+/** Starts pairing a new watch ([start]) or opens a chooser the system already prepared ([launchChooser]). */
+class AddWatchLauncher(val start: () -> Unit, val launchChooser: (IntentSender) -> Unit)
+
+/**
+ * The pairing flow shared by the first-setup screen and Settings: the system companion-device
+ * chooser, then OS bonding, saving the watch once bonded.
+ */
+@SuppressLint("MissingPermission")
+@Composable
+fun rememberAddWatch(ptrConnectionViewModel: PreConnectionViewModel): AddWatchLauncher {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val showPreparing by ptrConnectionViewModel.showPreparing.collectAsState()
 
     val timeoutJob = remember { mutableStateOf<Job?>(null) }
@@ -209,143 +344,23 @@ fun PreConnectionScreen(
 
     PreparingPairingDialog(visible = showPreparing, ptrConnectionViewModel = ptrConnectionViewModel)
 
-    LaunchedEffect(triggerPairing) {
-        if (triggerPairing) {
-            ptrConnectionViewModel.associate(
+    return AddWatchLauncher(
+        start = {
+            ptrConnectionViewModel.associateWithUi(
                 context,
                 object : ICDPDelegate {
                     override fun onChooserReady(chooserLauncher: IntentSender) {
                         launcher.launch(IntentSenderRequest.Builder(chooserLauncher).build())
-                        ptrConnectionViewModel.onPairingTriggered()
                     }
 
                     override fun onError(error: String) {
-                        AppSnackbar("Auto-pairing error: $error")
-                        ptrConnectionViewModel.onPairingTriggered()
+                        Timber.i(error)
                     }
-                }
+                },
             )
-        }
-    }
-
-    GShockSmartSyncTheme {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(modifier = Modifier
-                .fillMaxSize()
-                .systemBarsPadding()) {
-                AppCard(modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        WatchScreen(
-                            modifier = Modifier.fillMaxSize(),
-                            imageResId =
-                                when {
-                                    // Before the GA/GW checks: "ABL-100WE" contains neither, but
-                                    // keep it first so the more specific model always wins.
-                                    "ABL" in watchName -> R.drawable.abl_100we
-
-                                    "GA" in watchName || "GMA" in watchName ->
-                                        R.drawable.ga_b2100
-
-                                    "GW" in watchName || "GMW" in watchName ->
-                                        R.drawable.gw_b5600
-
-                                    "DW-H5600" in watchName -> R.drawable.dw_h5600
-                                    "DW" in watchName || "DMW" in watchName ->
-                                        R.drawable.dw_b5600
-
-                                    "ECB" in watchName -> R.drawable.ecb_30d
-                                    else -> R.drawable.gw_b5600
-                                },
-                            isAlwaysConnected = "DW-H5600" in watchName || "ECB" in watchName
-                        )
-
-                        AppConnectionSpinner(
-                            modifier = Modifier.align(Alignment.Center)
-                        )
-
-                        AppCard(
-                            modifier =
-                                Modifier
-                                    .align(Alignment.BottomStart)
-                                    .padding(start = 0.dp, bottom = 16.dp)
-                                    .fillMaxWidth(0.5f)
-                                    .fillMaxHeight(1f - GUIDELINE_LIST_TOP)
-                        ) {
-                            PairedDeviceList(
-                                devices = pairedDevices,
-                                onSelect = { device ->  // ← IMPLEMENT THIS
-                                    ptrConnectionViewModel.setDevice(
-                                        Utils.sanitizeMacAddress(device.address),
-                                        device.name
-                                    )
-                                },
-                                onDisassociate = { device ->
-                                    ptrConnectionViewModel.disassociate(
-                                        context,
-                                        Utils.sanitizeMacAddress(device.address)
-                                    )
-                                    scope.launch(Dispatchers.IO) {
-                                        LocalDataStorage.removeDeviceAddress(
-                                            context,
-                                            device.address
-                                        )
-                                    }
-                                },
-                                modifier = Modifier
-                                    .padding(8.dp)
-                                    .fillMaxWidth()
-                            )
-                        }
-
-                        Box(
-                            modifier =
-                                Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(top = 30.dp, end = 30.dp)
-                        ) {
-                            InfoButton(
-                                infoText =
-                                    stringResource(R.string.connection_screen_info) +
-                                            " v" +
-                                            BuildConfig.VERSION_NAME
-                            )
-                        }
-
-                        PairButton(
-                            modifier =
-                                Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(bottom = 30.dp, end = 30.dp),
-                            isFlashing = pairedDevices.isEmpty(),
-                            onClick = {
-                                ptrConnectionViewModel.associateWithUi(
-                                    context,
-                                    object : ICDPDelegate {
-                                        override fun onChooserReady(
-                                            chooserLauncher: IntentSender
-                                        ) {
-                                            launcher.launch(
-                                                IntentSenderRequest.Builder(
-                                                    chooserLauncher
-                                                )
-                                                    .build()
-                                            )
-                                        }
-
-                                        override fun onError(error: String) {
-                                            Timber.i(error)
-                                        }
-                                    }
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    }
+        },
+        launchChooser = { launcher.launch(IntentSenderRequest.Builder(it).build()) },
+    )
 }
 
 // --- Composable Components ---
