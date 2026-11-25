@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.avmedia.gshockGoogleSync.data.sleep.SleepSyncManager
 import org.avmedia.gshockGoogleSync.data.sleep.StoredHeartRate
@@ -37,6 +36,23 @@ internal fun sleepChargeTrend(
     }
 }
 
+/**
+ * Last day of the trend chart's window when [selected] gets selected. The window stays put while
+ * the selection is inside it (so tapping bars never scrolls the chart); otherwise it moves just
+ * enough to show [selected] with up to half a window of newer days, never past [newest].
+ */
+internal fun trendWindowEnd(
+    currentEnd: LocalDate?,
+    selected: LocalDate,
+    newest: LocalDate,
+    days: Int,
+): LocalDate {
+    val end = minOf(currentEnd ?: newest, newest)
+    val start = end.minusDays(days - 1L)
+    if (!selected.isBefore(start) && !selected.isAfter(end)) return end
+    return minOf(newest, selected.plusDays(days / 2L))
+}
+
 data class SleepUiState(
     val nights: List<StoredNight> = emptyList(), // newest first
     val selectedIndex: Int = 0,
@@ -44,6 +60,10 @@ data class SleepUiState(
     val error: String? = null,
     /** Heart-rate readings (0x52) during the selected night, oldest first. */
     val heartRate: List<StoredHeartRate> = emptyList(),
+    /** Last day of the trend chart; null means the newest night. */
+    val trendEnd: LocalDate? = null,
+    /** Day notes keyed by wake date. */
+    val notes: Map<LocalDate, String> = emptyMap(),
 ) {
     val selected: StoredNight? get() = nights.getOrNull(selectedIndex)
     val hasOlder: Boolean get() = selectedIndex < nights.lastIndex
@@ -52,9 +72,17 @@ data class SleepUiState(
     /** Wake dates that have a night, for the date picker. */
     val nightDates: Set<LocalDate> get() = nights.map { it.wakeDate() }.toSet()
 
-    /** Sleep charge over the [TREND_DAYS] days ending with the selected night. */
+    /** Sleep charge over the [TREND_DAYS] days of the chart window (see [trendWindowEnd]). */
     val trend: List<SleepChargeDay>
-        get() = selected?.let { sleepChargeTrend(nights, it.wakeDate(), TREND_DAYS) }.orEmpty()
+        get() {
+            val newest = nights.firstOrNull()?.wakeDate() ?: return emptyList()
+            val selectedDate = selected?.wakeDate() ?: return emptyList()
+            val end = trendWindowEnd(trendEnd, selectedDate, newest, TREND_DAYS)
+            return sleepChargeTrend(nights, end, TREND_DAYS)
+        }
+
+    /** Note of the selected night's day, if any. */
+    val selectedNote: String? get() = selected?.let { notes[it.wakeDate()] }
 
     companion object {
         const val TREND_DAYS = 14
@@ -66,13 +94,22 @@ class SleepViewModel @Inject constructor(
     private val sleepSyncManager: SleepSyncManager,
 ) : ViewModel() {
     private val selectedIndex = MutableStateFlow(0)
+    private val trendEnd = MutableStateFlow<LocalDate?>(null)
 
     val isSupported: Boolean get() = sleepSyncManager.isSupported
 
     val state: StateFlow<SleepUiState> =
-        combine(sleepSyncManager.state, sleepSyncManager.activity, selectedIndex) { s, activity, index ->
+        combine(
+            sleepSyncManager.state,
+            sleepSyncManager.activity,
+            selectedIndex,
+            trendEnd,
+            sleepSyncManager.notes,
+        ) { s, activity, index, end, notes ->
             val selected = index.coerceIn(0, (s.nights.size - 1).coerceAtLeast(0))
             SleepUiState(
+                trendEnd = end,
+                notes = notes,
                 nights = s.nights,
                 selectedIndex = selected,
                 syncing = s.syncing,
@@ -89,17 +126,36 @@ class SleepViewModel @Inject constructor(
     fun sync() {
         viewModelScope.launch {
             val newNights = sleepSyncManager.sync()
-            if (newNights != null && newNights > 0) selectedIndex.value = 0
+            if (newNights != null && newNights > 0) {
+                selectedIndex.value = 0
+                trendEnd.value = null
+            }
         }
     }
 
-    fun showOlder() = selectedIndex.update { (it + 1).coerceAtMost((state.value.nights.size - 1).coerceAtLeast(0)) }
+    fun showOlder() = selectIndex(selectedIndex.value + 1)
 
-    fun showNewer() = selectedIndex.update { (it - 1).coerceAtLeast(0) }
+    fun showNewer() = selectIndex(selectedIndex.value - 1)
 
     /** Selects the night that ended on [date], if there is one. */
     fun select(date: LocalDate) {
         val index = state.value.nights.indexOfFirst { it.wakeDate() == date }
-        if (index >= 0) selectedIndex.value = index
+        if (index >= 0) selectIndex(index)
+    }
+
+    private fun selectIndex(index: Int) {
+        val nights = state.value.nights
+        if (nights.isEmpty()) return
+        val i = index.coerceIn(0, nights.lastIndex)
+        trendEnd.value = trendWindowEnd(
+            trendEnd.value, nights[i].wakeDate(), nights.first().wakeDate(), SleepUiState.TREND_DAYS,
+        )
+        selectedIndex.value = i
+    }
+
+    /** Saves the note for the selected night's day; blank text deletes it. */
+    fun saveNote(text: String) {
+        val date = state.value.selected?.wakeDate() ?: return
+        viewModelScope.launch { sleepSyncManager.setNote(date, text) }
     }
 }

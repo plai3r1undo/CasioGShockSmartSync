@@ -246,6 +246,12 @@
     <string name="health_import_failed">Import failed: not a health data backup</string>
     <string name="sleep_charge_trend">Sleep charge, last %1$d days</string>
     <string name="sleep_charge_average">avg %1$d</string>
+    <string name="sleep_note_title">Note · %1$s</string>
+    <string name="sleep_note_empty">No note for this day</string>
+    <string name="sleep_note_hint">What happened that day? (late coffee, training, stress…)</string>
+    <string name="sleep_note_add">Add note</string>
+    <string name="sleep_note_edit">Edit note</string>
+    <string name="sleep_note_delete">Delete</string>
     <string name="active_time">%1$s active</string>
     <string name="energy">Energy</string>
     <string name="energy_total">kcal total</string>

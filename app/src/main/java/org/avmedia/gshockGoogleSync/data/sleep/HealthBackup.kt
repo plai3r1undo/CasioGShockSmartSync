@@ -15,11 +15,14 @@ data class HealthImportResult(
     val rawFilesAdded: Int,
     /** Nights from the backup's nights.json (merged; nights already on the phone are kept). */
     val nights: List<StoredNight>,
+    /** Day notes from the backup's notes.json (notes already on the phone are kept). */
+    val notes: Map<java.time.LocalDate, String> = emptyMap(),
 )
 
 /**
  * Zip backup of the health data in `files/sleep/`:
- * `sleep/nights.json`, `sleep/activity.json` and every raw life-log file under `sleep/raw/`.
+ * `sleep/nights.json`, `sleep/activity.json`, `sleep/notes.json` and every raw life-log file
+ * under `sleep/raw/`.
  *
  * The raw files are the source of truth (the watch sends each record only once), so an import
  * adds the missing raw files and the caller re-decodes nights and activity from them. The
@@ -56,6 +59,7 @@ class HealthBackup(private val dir: File) {
         var added = 0
         var recognised = 0
         var nights = emptyList<StoredNight>()
+        var notes = emptyMap<java.time.LocalDate, String>()
         val zip = ZipInputStream(input)
         while (true) {
             val entry = zip.nextEntry ?: break
@@ -83,11 +87,15 @@ class HealthBackup(private val dir: File) {
                     }
                 }
                 name == "${PREFIX}activity.json" -> recognised++ // rebuilt from the raw files
+                name == "${PREFIX}${NoteStore.FILE_NAME}" -> {
+                    recognised++
+                    notes = NoteStore.parse(String(zip.readBounded(), Charsets.UTF_8))
+                }
             }
             zip.closeEntry()
         }
         require(recognised > 0) { "Not a health data backup" }
-        return HealthImportResult(added, nights)
+        return HealthImportResult(added, nights, notes)
     }
 
     private fun ZipInputStream.readBounded(): ByteArray {
@@ -105,7 +113,7 @@ class HealthBackup(private val dir: File) {
     private companion object {
         const val PREFIX = "sleep/"
         const val MAX_ENTRY_BYTES = 16 * 1024 * 1024
-        val TOP_LEVEL_FILES = listOf("nights.json", "activity.json")
+        val TOP_LEVEL_FILES = listOf("nights.json", "activity.json", NoteStore.FILE_NAME)
         val RAW_NAME = Regex("""\d{8}-\d{6}_[0-9a-f]{2}_[0-9a-f]{2}\.bin""")
     }
 }

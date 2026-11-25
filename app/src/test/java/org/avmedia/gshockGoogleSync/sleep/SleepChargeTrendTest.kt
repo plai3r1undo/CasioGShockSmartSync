@@ -2,6 +2,7 @@ package org.avmedia.gshockGoogleSync.sleep
 
 import org.avmedia.gshockGoogleSync.data.sleep.StoredNight
 import org.avmedia.gshockGoogleSync.ui.health.sleepChargeTrend
+import org.avmedia.gshockGoogleSync.ui.health.trendWindowEnd
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.Instant
@@ -33,5 +34,22 @@ class SleepChargeTrendTest {
         val trend = sleepChargeTrend(nights, LocalDate.parse("2026-11-23"), 7, zone)
         assertEquals(LocalDate.parse("2026-11-17"), trend.first().date)
         assertEquals(listOf(null, 60, null, null, null, 67, 75), trend.map { it.charge })
+    }
+
+    @Test
+    fun windowStaysPutWhileTappingInsideItAndCanAlwaysGoForward() {
+        val newest = LocalDate.parse("2026-11-25")
+        fun d(s: String) = LocalDate.parse(s)
+        // Tapping an older bar inside the window keeps the window (was: moved to end there).
+        val end = trendWindowEnd(null, d("2026-11-15"), newest, 14)
+        assertEquals(newest, end)
+        // Tapping a newer bar again still shows the same window.
+        assertEquals(newest, trendWindowEnd(end, d("2026-11-20"), newest, 14))
+        // Going before the window moves it, leaving half a window of newer days to tap.
+        val moved = trendWindowEnd(end, d("2026-11-05"), newest, 14)
+        assertEquals(d("2026-11-12"), moved)
+        // ...and moving forward past its end brings it back, never past the newest night.
+        assertEquals(d("2026-11-20"), trendWindowEnd(moved, d("2026-11-13"), newest, 14))
+        assertEquals(newest, trendWindowEnd(moved, d("2026-11-24"), newest, 14))
     }
 }

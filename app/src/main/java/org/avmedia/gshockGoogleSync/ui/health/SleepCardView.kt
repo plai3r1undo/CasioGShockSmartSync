@@ -16,7 +16,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -43,6 +48,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,6 +59,7 @@ import org.avmedia.gshockGoogleSync.data.sleep.StoredNight
 import org.avmedia.gshockGoogleSync.ui.common.AppCard
 import org.avmedia.gshockGoogleSync.ui.common.AppDatePickerDialog
 import org.avmedia.gshockapi.model.SleepStage
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -158,10 +165,85 @@ fun SleepCardView(
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
             Spacer(Modifier.height(12.dp))
-            SleepChargeTrend(state.trend, onSelect = viewModel::select)
+            SleepChargeTrend(
+                days = state.trend,
+                selectedDate = night.wakeDate(),
+                noteDates = state.notes.keys,
+                onSelect = viewModel::select,
+            )
+            Spacer(Modifier.height(8.dp))
+            DayNote(
+                date = night.wakeDate(),
+                note = state.selectedNote,
+                onSave = viewModel::saveNote,
+            )
         }
     }
 }
+
+/**
+ * Note for the selected night's day (what may explain a good or bad night), with an edit
+ * dialog. Days with a note are marked with a dot under their bar in the trend chart.
+ */
+@Composable
+private fun DayNote(date: LocalDate, note: String?, onSave: (String) -> Unit) {
+    var editing by remember(date) { mutableStateOf(false) }
+    val dateLabel = date.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
+
+    Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.weight(1f).padding(top = 12.dp)) {
+            Text(
+                text = stringResource(R.string.sleep_note_title, dateLabel),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = note ?: stringResource(R.string.sleep_note_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                fontStyle = if (note == null) FontStyle.Italic else FontStyle.Normal,
+                color = if (note == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        IconButton(onClick = { editing = true }) {
+            Icon(
+                imageVector = if (note == null) Icons.Default.Add else Icons.Default.Edit,
+                contentDescription = stringResource(if (note == null) R.string.sleep_note_add else R.string.sleep_note_edit),
+            )
+        }
+    }
+
+    if (editing) {
+        var text by remember { mutableStateOf(note.orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { editing = false },
+            title = { Text(stringResource(R.string.sleep_note_title, dateLabel)) },
+            text = {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(MAX_NOTE_LENGTH) },
+                    placeholder = { Text(stringResource(R.string.sleep_note_hint)) },
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { onSave(text); editing = false }) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                Row {
+                    if (note != null) {
+                        TextButton(onClick = { onSave(""); editing = false }) {
+                            Text(stringResource(R.string.sleep_note_delete), color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    TextButton(onClick = { editing = false }) { Text(stringResource(R.string.cancel)) }
+                }
+            },
+        )
+    }
+}
+
+private const val MAX_NOTE_LENGTH = 1000
 
 @Composable
 private fun ErrorLine(text: String) {
@@ -301,18 +383,25 @@ private fun HeartRateLine(night: StoredNight, readings: List<StoredHeartRate>) {
 }
 
 /**
- * Sleep charge per night over the last two weeks, ending with the selected night (highlighted).
- * Days without a night leave a gap; the dashed line is the average of the nights shown.
- * Tapping a bar selects that night.
+ * Sleep charge per night over two weeks, with the selected night highlighted. Days without a
+ * night leave a gap; the dashed line is the average of the nights shown; a dot under a bar
+ * means that day has a note. Tapping a bar selects that night (the window stays put, see
+ * [trendWindowEnd]).
  */
 @Composable
-private fun SleepChargeTrend(days: List<SleepChargeDay>, onSelect: (java.time.LocalDate) -> Unit) {
+private fun SleepChargeTrend(
+    days: List<SleepChargeDay>,
+    selectedDate: LocalDate,
+    noteDates: Set<LocalDate>,
+    onSelect: (LocalDate) -> Unit,
+) {
     val known = days.mapNotNull { it.charge }
     if (days.isEmpty() || known.isEmpty()) return
     val average = known.average().toFloat()
     val barColor = MaterialTheme.colorScheme.primary
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val noteColor = MaterialTheme.colorScheme.tertiary
     val dateFormat = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
 
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -332,7 +421,7 @@ private fun SleepChargeTrend(days: List<SleepChargeDay>, onSelect: (java.time.Lo
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
-            .height(72.dp)
+            .height(80.dp)
             .pointerInput(days) {
                 detectTapGestures { tap ->
                     val day = days.getOrNull((tap.x / size.width * days.size).toInt())
@@ -342,15 +431,20 @@ private fun SleepChargeTrend(days: List<SleepChargeDay>, onSelect: (java.time.Lo
     ) {
         val slot = size.width / days.size
         val gap = slot * 0.25f
-        fun y(charge: Float) = size.height * (1f - charge / 100f)
-        drawLine(gridColor, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx())
+        val dotRadius = 2.5.dp.toPx()
+        val chartHeight = size.height - 4 * dotRadius // room for the note dots below the baseline
+        fun y(charge: Float) = chartHeight * (1f - charge / 100f)
+        drawLine(gridColor, Offset(0f, chartHeight), Offset(size.width, chartHeight), strokeWidth = 1.dp.toPx())
         days.forEachIndexed { i, day ->
+            if (day.date in noteDates) {
+                drawCircle(noteColor, dotRadius, Offset(i * slot + slot / 2, size.height - dotRadius))
+            }
             val charge = day.charge ?: return@forEachIndexed
-            val selected = i == days.lastIndex
+            val selected = day.date == selectedDate
             drawRect(
                 color = if (selected) barColor else barColor.copy(alpha = 0.4f),
                 topLeft = Offset(i * slot + gap / 2, y(charge.toFloat())),
-                size = Size(slot - gap, size.height - y(charge.toFloat())),
+                size = Size(slot - gap, chartHeight - y(charge.toFloat())),
             )
         }
         drawLine(

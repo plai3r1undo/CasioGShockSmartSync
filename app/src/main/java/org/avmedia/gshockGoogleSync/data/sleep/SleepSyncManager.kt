@@ -40,6 +40,8 @@ class SleepSyncManager @Inject constructor(
     private val store = SleepStore(dir)
     private val activityStore = ActivityStore(dir)
     private val backup = HealthBackup(dir)
+    private val noteStore = NoteStore(dir)
+    private val notesMutex = Mutex() // separate from [mutex], so saving a note never waits for a transfer
     private val mutex = Mutex()
 
     private val _activity = MutableStateFlow(loadActivity())
@@ -50,7 +52,19 @@ class SleepSyncManager @Inject constructor(
     private val _state = MutableStateFlow(SleepSyncState(nights = loadNights()))
     val state: StateFlow<SleepSyncState> = _state.asStateFlow()
 
+    private val _notes = MutableStateFlow(
+        runCatching { noteStore.load() }.onFailure { Timber.e(it, "Cannot load notes") }.getOrDefault(emptyMap())
+    )
+
+    /** Day notes keyed by the night's wake date. */
+    val notes: StateFlow<Map<java.time.LocalDate, String>> = _notes.asStateFlow()
+
     val isSupported: Boolean get() = WatchInfo.hasSleepData
+
+    /** Saves the note for [date]; blank text deletes it. */
+    suspend fun setNote(date: java.time.LocalDate, text: String) = withContext(Dispatchers.IO) {
+        notesMutex.withLock { _notes.value = noteStore.set(date, text) }
+    }
 
     /** Returns the number of new nights, or null if a sync was skipped or failed. */
     suspend fun sync(): Int? {
@@ -114,6 +128,7 @@ class SleepSyncManager @Inject constructor(
             val nights = store.merge(decodeNightsFromRaw())
             val archived = store.archivedTransfers().mapNotNull(ActivityIOFunctional::parse)
             if (archived.isNotEmpty()) _activity.value = activityStore.merge(archived)
+            _notes.value = notesMutex.withLock { noteStore.mergeMissing(result.notes) }
             _state.update { it.copy(nights = nights) }
             Timber.i("Imported health backup: ${result.rawFilesAdded} raw file(s), ${nights.size} night(s)")
             result
